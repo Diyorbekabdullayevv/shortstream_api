@@ -1,19 +1,14 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
+	"virtual_hole_api/internal/database/dbhandlers"
 	"virtual_hole_api/internal/moduls"
 	"virtual_hole_api/utils"
 
 	"github.com/gin-gonic/gin"
-)
-
-var (
-	jsonFileName = "registered_users.json"
 )
 
 func RegisterUser(ctx *gin.Context) {
@@ -33,9 +28,7 @@ func RegisterUser(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"message": "invalid request"})
 		fmt.Println("Invalid email!")
 		return
-	}
-
-	if len(newUser.Password) < 6 || len(newUser.Password) > 320 {
+	} else if len(newUser.Password) < 6 || len(newUser.Password) > 320 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"message": "invalid request"})
 		fmt.Println("Invalid password!")
 		return
@@ -45,45 +38,49 @@ func RegisterUser(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"message": "invalid request"})
 		fmt.Println(err)
-		fmt.Println(newUser.Password)
 		return
 	}
 
-	var users []moduls.RegisterUser
-	jsonData, err := os.ReadFile(jsonFileName)
-	if err == nil && len(jsonData) > 0 {
-		err := json.Unmarshal(jsonData, &users)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			fmt.Println("Failed to UNMARSHAL data from JSON format:", err)
-			return
-		}
-	}
-
-	if len(users) == 0 {
-		users = append(users, newUser)
-	} else {
-		for _, user := range users {
-			if user.Email == newUser.Email {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "user with this email already exists"})
-				return
-			}
-		}
-		users = append(users, newUser)
-	}
-
-	bytes, err := json.MarshalIndent(users, "", " ")
+	hashedPassword, err := utils.HashPassword(newUser.Password)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to MARSHAL user data to JSON format:", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		fmt.Println("Failed to HASH user password:", err)
 		return
 	}
 
-	err = os.WriteFile(jsonFileName, bytes, 0644)
+	newUser.Password = hashedPassword
+
+	err = dbhandlers.RegisterUserDB(newUser)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to WRITE data to JSON file:", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		fmt.Println("Failed to SAVE user in the database:", err)
 		return
 	}
+
+	userMap := map[string]any{
+		"Name:":  newUser.FullName,
+		"Email:": newUser.Email,
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{"message": "user successfully registered"})
+	ctx.JSON(http.StatusCreated, gin.H{"User:": userMap})
+}
+
+func GetUser(ctx *gin.Context) {
+	userId := ctx.Param("id")
+
+	user, err := dbhandlers.GetUserDB(ctx, userId)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to GET user from database:", err)
+		return
+	}
+
+	userMap := map[string]any{
+		"Name:":  user.FullName,
+		"Email:": user.Email,
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "success"})
+	ctx.JSON(http.StatusFound, gin.H{"User:": userMap})
 }
