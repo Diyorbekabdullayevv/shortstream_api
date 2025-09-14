@@ -1,16 +1,24 @@
 package main
 
 import (
-	"virtual_hole_api/internal/api/handlers"
+	"fmt"
+	"virtual_hole_api/internal/api/routers"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("Failed to LOAD environment variables:", err)
+		return
+	}
+
 	server := gin.Default()
 
-	server.POST("/authentication/registration", handlers.RegisterUser)
-	server.GET("/authentication/user/:id", handlers.GetUser)
+	routers.Router(server)
 
 	server.Run(":5000")
 }

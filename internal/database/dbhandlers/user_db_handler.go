@@ -4,12 +4,12 @@ import (
 	"database/sql"
 	"net/http"
 	"virtual_hole_api/internal/database/dbConnect"
-	"virtual_hole_api/internal/moduls"
+	"virtual_hole_api/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterUserDB(newUser moduls.RegisterUser) error {
+func RegisterUserDB(newUser models.RegisterUser) error {
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
 		return err
@@ -23,21 +23,21 @@ func RegisterUserDB(newUser moduls.RegisterUser) error {
 	return nil
 }
 
-func GetUserDB(ctx *gin.Context, userId string) (moduls.RegisterUser, error) {
+func GetUserDB(ctx *gin.Context, userId string) (models.RegisterUser, error) {
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
-		return moduls.RegisterUser{}, err
+		return models.RegisterUser{}, err
 	}
 	defer db.Close()
 
-	var user moduls.RegisterUser
+	var user models.RegisterUser
 	err = db.QueryRow(`SELECT fullname, email, password FROM RegisterUser where id = $1`, userId).
 		Scan(&user.FullName, &user.Email, &user.Password)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
 		}
-		return moduls.RegisterUser{}, err
+		return models.RegisterUser{}, err
 	}
 	return user, nil
 }

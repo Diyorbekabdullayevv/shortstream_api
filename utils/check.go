@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"os"
 	"unicode"
-	"virtual_hole_api/internal/moduls"
+	"virtual_hole_api/internal/database/dbhandlers"
+	"virtual_hole_api/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,8 +45,8 @@ func CheckString(str string) error {
 	return nil
 }
 
-func StoreDataToJsonFile(ctx *gin.Context, newUser moduls.RegisterUser) error {
-	var users []moduls.RegisterUser
+func StoreDataToJsonFile(ctx *gin.Context, newUser models.RegisterUser) error {
+	var users []models.RegisterUser
 	jsonData, err := os.ReadFile(jsonFileName)
 	if err == nil && len(jsonData) > 0 {
 		err := json.Unmarshal(jsonData, &users)
@@ -84,23 +85,21 @@ func StoreDataToJsonFile(ctx *gin.Context, newUser moduls.RegisterUser) error {
 	return nil
 }
 
-// err = utils.StoreDataToJsonFile(ctx, newUser)
-// if err != nil {
-// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-// 	fmt.Println("Failed to STORE data to JSON file!")
-// 	return
-// }
-// db, err := db.ConnectDB()
-// if err != nil {
-// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-// 	fmt.Println("Failed to CONNECT to database:", err)
-// 	return
-// }
-// defer db.Close()
+func GetUser(ctx *gin.Context) {
+	userId := ctx.Param("id")
 
-// _, err = db.Exec(`INSERT INTO UserRegistration (fullname, email, password) VALUES (?,?,?)`, newUser.FullName, newUser.Email, newUser.Password)
-// if err != nil {
-// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-// 	fmt.Println("Failed to EXECUTE data to database:", err)
-// 	return
-// }
+	user, err := dbhandlers.GetUserDB(ctx, userId)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to GET user from database:", err)
+		return
+	}
+
+	userMap := map[string]any{
+		"Name:":  user.FullName,
+		"Email:": user.Email,
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "success"})
+	ctx.JSON(http.StatusFound, gin.H{"User:": userMap})
+}
