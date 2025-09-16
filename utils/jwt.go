@@ -20,31 +20,31 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func VerifyUser(ctx *gin.Context, user models.RegisterUser) (models.RegisterUser, error) {
+func VerifyUser(ctx *gin.Context, user models.User) (models.User, error) {
 
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
-		return models.RegisterUser{}, err
+		return models.User{}, err
 	}
 	defer db.Close()
 
-	var existingUser models.RegisterUser
-	err = db.QueryRow(`SELECT id, fullname, email, password FROM RegisterUser where email = $1`, user.Email).
-		Scan(&existingUser.Id, &existingUser.FullName, &existingUser.Email, &existingUser.Password)
+	var existingUser models.User
+	err = db.QueryRow(`SELECT id, email, password FROM users where email = $1`, user.Email).
+		Scan(&existingUser.Id, &existingUser.Email, &existingUser.Password)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
 		}
-		return models.RegisterUser{}, err
+		return models.User{}, err
 	}
 
 	if user.Email != existingUser.Email {
-		return models.RegisterUser{}, errors.New("invalid email")
+		return models.User{}, errors.New("invalid email")
 	}
 
 	isValid := CheckHashPassword(user.Password, existingUser.Password)
 	if !isValid {
-		return models.RegisterUser{}, errors.New("invalid password")
+		return models.User{}, errors.New("invalid password")
 	}
 
 	return existingUser, nil
@@ -95,4 +95,16 @@ func VerifyToken(tokenStr string, isRefresh bool) (*Claims, error) {
 		return claims, nil
 	}
 	return nil, err
+}
+
+func GenTknForCheckUsername(email string) (string, error) {
+
+	secretKey := "super_secret_key"
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": email,
+		"scope": "username_only",
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	})
+	return token.SignedString([]byte(secretKey))
 }

@@ -1,20 +1,13 @@
 package utils
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"unicode"
 	"virtual_hole_api/internal/database/dbhandlers"
-	"virtual_hole_api/internal/models"
 
 	"github.com/gin-gonic/gin"
-)
-
-var (
-	jsonFileName = "registered_users.json"
 )
 
 func CheckString(str string) error {
@@ -45,45 +38,45 @@ func CheckString(str string) error {
 	return nil
 }
 
-func StoreDataToJsonFile(ctx *gin.Context, newUser models.RegisterUser) error {
-	var users []models.RegisterUser
-	jsonData, err := os.ReadFile(jsonFileName)
-	if err == nil && len(jsonData) > 0 {
-		err := json.Unmarshal(jsonData, &users)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-			fmt.Println("Failed to UNMARSHAL data from JSON format:", err)
-			return err
-		}
-	}
+// func StoreDataToJsonFile(ctx *gin.Context, newUser models.RegisterUser) error {
+// 	var users []models.RegisterUser
+// 	jsonData, err := os.ReadFile(jsonFileName)
+// 	if err == nil && len(jsonData) > 0 {
+// 		err := json.Unmarshal(jsonData, &users)
+// 		if err != nil {
+// 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+// 			fmt.Println("Failed to UNMARSHAL data from JSON format:", err)
+// 			return err
+// 		}
+// 	}
 
-	if len(users) == 0 {
-		users = append(users, newUser)
-	} else {
-		for _, user := range users {
-			if user.Email == newUser.Email {
-				ctx.JSON(http.StatusBadRequest, gin.H{"error": "user with this email already exists"})
-				return err
-			}
-		}
-		users = append(users, newUser)
-	}
+// 	if len(users) == 0 {
+// 		users = append(users, newUser)
+// 	} else {
+// 		for _, user := range users {
+// 			if user.Email == newUser.Email {
+// 				ctx.JSON(http.StatusBadRequest, gin.H{"error": "user with this email already exists"})
+// 				return err
+// 			}
+// 		}
+// 		users = append(users, newUser)
+// 	}
 
-	bytes, err := json.MarshalIndent(users, "", " ")
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to MARSHAL user data to JSON format:", err)
-		return err
-	}
+// 	bytes, err := json.MarshalIndent(users, "", " ")
+// 	if err != nil {
+// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+// 		fmt.Println("Failed to MARSHAL user data to JSON format:", err)
+// 		return err
+// 	}
 
-	err = os.WriteFile(jsonFileName, bytes, 0644)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to WRITE data to JSON file:", err)
-		return err
-	}
-	return nil
-}
+// 	err = os.WriteFile(jsonFileName, bytes, 0644)
+// 	if err != nil {
+// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+// 		fmt.Println("Failed to WRITE data to JSON file:", err)
+// 		return err
+// 	}
+// 	return nil
+// }
 
 func GetUser(ctx *gin.Context) {
 	userId := ctx.Param("id")
