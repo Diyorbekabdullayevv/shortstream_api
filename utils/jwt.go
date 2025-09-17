@@ -50,12 +50,12 @@ func VerifyUser(ctx *gin.Context, user models.User) (models.User, error) {
 	return existingUser, nil
 }
 
-func GenerateTokens(email string) (accessToken string, refreshToken string, err error) {
+func GenerateTokens(email string, expMins time.Duration) (accessToken string, refreshToken string, err error) {
 
 	accessClaims := &Claims{
 		Email: email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)), // short
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expMins)), 
 		},
 	}
 
@@ -68,7 +68,7 @@ func GenerateTokens(email string) (accessToken string, refreshToken string, err 
 	refreshClaims := &Claims{
 		Email: email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), // 7 days
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), 
 		},
 	}
 

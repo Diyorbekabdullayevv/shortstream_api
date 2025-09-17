@@ -3,6 +3,7 @@ package dbhandlers
 import (
 	"database/sql"
 	"net/http"
+	"time"
 	"virtual_hole_api/internal/database/dbConnect"
 	"virtual_hole_api/internal/models"
 
@@ -111,6 +112,20 @@ func SaveUsernameDB(username, email string) error {
 	defer db.Close()
 
 	_, err = db.Exec(`INSERT INTO usernames (username, email) VALUES ($1, $2)`, username, email)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func UpdateUsernameDB(username, email string) error {
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`UPDATE usernames SET username = $1, username_changed_at = $2 WHERE email = $3`, username, time.Now().UTC(), email)
 	if err != nil {
 		return err
 	}

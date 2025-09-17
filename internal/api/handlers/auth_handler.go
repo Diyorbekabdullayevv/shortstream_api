@@ -106,7 +106,9 @@ func LoginUser(ctx *gin.Context) {
 		return
 	}
 
-	accessToken, refreshToken, err := utils.GenerateTokens(user.Email)
+	expMins := 15 * time.Minute
+
+	accessToken, refreshToken, err := utils.GenerateTokens(user.Email, expMins)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		fmt.Println("Failed to GENERATE token:", err)
@@ -245,13 +247,18 @@ func CheckUsername(ctx *gin.Context) {
 
 	if err != nil || !token.Valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
-		fmt.Println("token:",token)
+		fmt.Println("token:", token)
 		return
 	}
 
 	claims := token.Claims.(jwt.MapClaims)
 	if claims["scope"] != "username_only" {
 		ctx.JSON(http.StatusForbidden, gin.H{"error": "token not allowed for this action"})
+		return
+	}
+
+	if len(usernameStruct.Username) < 3 || len(usernameStruct.Username) > 56 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain at least 3 to 56 characters!"})
 		return
 	}
 
@@ -284,7 +291,91 @@ func CheckUsername(ctx *gin.Context) {
 }
 
 func ChangeUsername(ctx *gin.Context) {
+	var usernameStruct models.Username
+	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
+		fmt.Println("Failed to BIND body with json:", err)
+		return
+	}
 
+	authHeader := ctx.GetHeader("Authorization")
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		return []byte("super_secret_key"), nil
+	})
+
+	if err != nil || !token.Valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+		fmt.Println("token:", token)
+		return
+	}
+
+	claims := token.Claims.(jwt.MapClaims)
+	if claims["scope"] != "username_only" {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "token not allowed for this action"})
+		return
+	}
+
+	if len(usernameStruct.Username) < 3 || len(usernameStruct.Username) > 56 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain at least 3 to 56 characters!"})
+		return
+	}
+
+	if !strings.Contains(usernameStruct.Username, ".") || !strings.Contains(usernameStruct.Username, "_") {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain both '.' and '_' signs!"})
+		return
+	}
+
+	exists, err := dbhandlers.CheckUsernameIfExistsDB(usernameStruct.Username)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to CHECK if username exists:", err)
+		return
+	}
+
+	if exists {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "username already choosen by users"})
+		return
+	}
+
+	email := claims["email"]
+	err = dbhandlers.UpdateUsernameDB(usernameStruct.Username, email.(string))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to UPDATE username to database:", err)
+		return
+	}
+
+	expMins := 24 * time.Hour
+
+	accessToken, refreshToken, err := utils.GenerateTokens(usernameStruct.Email, expMins)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to GENERATE tokens:", err)
+		return
+	}
+
+	ctx.Header("Authorization", "Bearer "+accessToken)
+
+	ctx.SetCookie(
+		"refresh_token",
+		refreshToken,
+		7*24*60*60,
+		"/",
+		"localhost",
+		true,
+		true,
+	)
+
+	tokenMap := map[string]string{
+		"token":        accessToken,
+		"refreshToken": refreshToken,
+	}
+
+	ctx.JSON(http.StatusCreated, gin.H{"message": "username successfully changed"})
+	ctx.JSON(http.StatusCreated, gin.H{"data": tokenMap})
 }
 
 func ForgotPassword(ctx *gin.Context) {
