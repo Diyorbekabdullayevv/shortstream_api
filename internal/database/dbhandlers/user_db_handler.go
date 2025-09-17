@@ -2,6 +2,7 @@ package dbhandlers
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"time"
 	"virtual_hole_api/internal/database/dbConnect"
@@ -57,18 +58,18 @@ func OneTimeCodeGetUserDB(ctx *gin.Context, oneTimeCode models.OneTimeCode) (mod
 	return newCode, nil
 }
 
-func ResendCodeStoreUserDB(user models.OneTimeCode) (models.OneTimeCode, error) {
+func UpdateOneTimeCodeDB(user models.OneTimeCode) error {
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
-		return models.OneTimeCode{}, err
+		return err
 	}
 	defer db.Close()
 
 	_, err = db.Exec(`UPDATE one_time_code SET code = $1, last_code_sent_at = $2 WHERE email = $3`, user.Code, user.LastCodeSentAt, user.Email)
 	if err != nil {
-		return models.OneTimeCode{}, err
+		return err
 	}
-	return user, nil
+	return nil
 }
 
 func GetUserDB(ctx *gin.Context, userId string) (models.User, error) {
@@ -130,4 +131,81 @@ func UpdateUsernameDB(username, email string) error {
 		return err
 	}
 	return nil
+}
+
+func GetUsernameDB(usernameStruct models.Username) (models.Username, error) {
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return models.Username{}, err
+	}
+	defer db.Close()
+
+	var exUsernameStruct models.Username
+	if usernameStruct.Username != "" {
+		err = db.QueryRow(`SELECT * FROM usernames WHERE username = $1`, usernameStruct.Username).
+			Scan(&exUsernameStruct.ID, &exUsernameStruct.Username, &exUsernameStruct.Email, &exUsernameStruct.UsernameCreatedAt, &exUsernameStruct.UsernameChangedAt)
+		if err != nil {
+			return models.Username{}, err
+		}
+	} else if usernameStruct.Email != "" {
+		err = db.QueryRow(`SELECT * FROM usernames WHERE email = $1`, usernameStruct.Email).
+			Scan(&exUsernameStruct.ID, &exUsernameStruct.Username, &exUsernameStruct.Email, &exUsernameStruct.UsernameCreatedAt, &exUsernameStruct.UsernameChangedAt)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return models.Username{}, err
+			}
+			return models.Username{}, err
+		}
+	} else {
+		return models.Username{}, errors.New("either username or email must be provided")
+	}
+
+	return exUsernameStruct, nil
+}
+
+func SavePasswordDB(password, email string) error {
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`INSERT INTO passwords (password, email) VALUES ($1, $2)`, password, email)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func UpdatePasswordDB(password, email string) error {
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`UPDATE passwords SET password = $1, password_changed_at = $2 WHERE email = $3`, password, time.Now().UTC(), email)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func GetPasswordDB(email string) (models.Password, error) {
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return models.Password{}, err
+	}
+	defer db.Close()
+
+	var password models.Password
+	err = db.QueryRow(`SELECT * FROM passwords email = $1`, email).
+		Scan(&password.ID, &password.Password, &password.Email, &password.PasswordCreatedAt, &password.PasswordChangedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return models.Password{}, err
+		}
+		return models.Password{}, err
+	}
+	return password, nil
 }

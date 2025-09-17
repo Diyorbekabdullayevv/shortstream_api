@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strings"
@@ -56,6 +57,13 @@ func RegisterUser(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
 		fmt.Println("Failed to SAVE user in the database:", err)
+		return
+	}
+
+	err = dbhandlers.SavePasswordDB(newUser.Password, newUser.Email)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		fmt.Println("Failed to SAVE password in the database:", err)
 		return
 	}
 
@@ -178,9 +186,7 @@ func ResendCode(ctx *gin.Context) {
 		}
 		exUser.Code = code
 		exUser.LastCodeSentAt = time.Now()
-		fmt.Println("New code:", exUser.Code)
-		fmt.Println("Last code sent at:", exUser.LastCodeSentAt)
-		exUser, err = dbhandlers.ResendCodeStoreUserDB(exUser)
+		err = dbhandlers.UpdateOneTimeCodeDB(exUser)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			fmt.Println("Failed to SAVE user to database:", err)
@@ -217,7 +223,7 @@ func ConfirmCode(ctx *gin.Context) {
 		return
 	}
 
-	tokenString, err := utils.GenTknForCheckUsername(user.Email)
+	tokenString, err := utils.GenTknForChecking(user.Email, "username_only")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to GEERATE token:", err)
@@ -228,7 +234,7 @@ func ConfirmCode(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"message": "code successfuly confirmed"})
 }
 
-func CheckUsername(ctx *gin.Context) {
+func CreateUsername(ctx *gin.Context) {
 
 	var usernameStruct models.Username
 	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
@@ -379,11 +385,152 @@ func ChangeUsername(ctx *gin.Context) {
 }
 
 func ForgotPassword(ctx *gin.Context) {
+	var usernameStruct models.Username
+	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
+		fmt.Println("Failed to BIND body with json:", err)
+		return
+	}
 
+	exUsernameStruct, err := dbhandlers.GetUsernameDB(usernameStruct)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "user not found"})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		fmt.Println("Failed to FETCH username data from database:", err)
+		return
+	}
+
+	code, err := utils.GenerateCode()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		fmt.Println("Failed to GENERATE 6 digit code:", err)
+		return
+	}
+
+	err = utils.SendEmail(exUsernameStruct.Email, code)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		fmt.Println("Failed to SEND 6 digit code to user email:", err)
+		return
+	}
+
+	var oneTimeCode models.OneTimeCode
+	oneTimeCode.Email = exUsernameStruct.Email
+	oneTimeCode.Code = code
+	oneTimeCode.LastCodeSentAt = time.Now()
+	err = dbhandlers.UpdateOneTimeCodeDB(oneTimeCode)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to SAVE user to database:", err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "code sent to your email"})
+}
+
+func ConfirmCodeResetPassword(ctx *gin.Context) {
+
+	var user models.OneTimeCode
+	err := ctx.ShouldBindBodyWithJSON(&user)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
+		fmt.Println("Failed to BIND body with json:", err)
+		return
+	}
+
+	exUser, err := dbhandlers.OneTimeCodeGetUserDB(ctx, user)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to FETCH one_time_code details from database:", err)
+		return
+	}
+
+	if user.Code != exUser.Code {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "invalid code"})
+		return
+	}
+
+	tokenString, err := utils.GenTknForChecking(user.Email, "password_only")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to GEERATE token:", err)
+		return
+	}
+
+	ctx.Header("Authorization", "Bearer "+tokenString)
+	ctx.JSON(http.StatusOK, gin.H{"message": "code successfuly confirmed"})
 }
 
 func ResetPassword(ctx *gin.Context) {
+	var password models.Password
+	err := ctx.ShouldBindBodyWithJSON(&password)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
+		fmt.Println("Failed to BIND body with json:", err)
+		return
+	}
 
+	// Verify token
+	authHeader := ctx.GetHeader("Authorization")
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
+		return []byte("super_secret_key"), nil
+	})
+
+	if err != nil || !token.Valid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+		fmt.Println("token:", token)
+		return
+	}
+
+	claims := token.Claims.(jwt.MapClaims)
+	if claims["scope"] != "password_only" {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": "token not allowed for this action"})
+		return
+	}
+	email := claims["email"]
+
+	// Verify password
+	if password.Password != password.RepeatPassword {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "both passwords must be the same"})
+		return
+	}
+
+	if len(password.Password) < 6 || len(password.Password) > 320 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": "invalid request"})
+		fmt.Println("Invalid password!")
+		return
+	}
+
+	err = utils.CheckString(password.Password)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": "invalid request"})
+		fmt.Println(err)
+		return
+	}
+
+	hashedPassword, err := utils.HashPassword(password.Password)
+	password.Password = hashedPassword
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		fmt.Println("Failed to HASH user password:", err)
+		return
+	}
+
+	// Save updated password data
+	err = dbhandlers.UpdatePasswordDB(password.Password, email.(string))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to UPDATE password in database:", err)
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, gin.H{"message": "password successfully reset"})
 }
 
 func LoginWithGoogle(ctx *gin.Context) {

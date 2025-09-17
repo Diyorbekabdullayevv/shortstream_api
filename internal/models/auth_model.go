@@ -42,3 +42,12 @@ type IpAPIResponse struct {
 	City       string `json:"city"`
 	Query      string `json:"query"`
 }
+
+type Password struct {
+	ID                int        `json:"id"`
+	Password          string     `json:"password"`
+	RepeatPassword    string     `json:"repeat_password,omitempty"`
+	Email             string     `json:"email"`
+	PasswordCreatedAt *time.Time `json:"password_created_at,omitempty"`
+	PasswordChangedAt *time.Time `json:"password_changed_at,omitempty"`
+}

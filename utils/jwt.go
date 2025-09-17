@@ -97,13 +97,13 @@ func VerifyToken(tokenStr string, isRefresh bool) (*Claims, error) {
 	return nil, err
 }
 
-func GenTknForCheckUsername(email string) (string, error) {
+func GenTknForChecking(email, scope string) (string, error) {
 
 	secretKey := "super_secret_key"
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"email": email,
-		"scope": "username_only",
+		"scope": scope,
 		"exp":   time.Now().Add(15 * time.Minute).Unix(),
 	})
 	return token.SignedString([]byte(secretKey))
