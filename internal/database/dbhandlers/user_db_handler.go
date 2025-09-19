@@ -1,14 +1,10 @@
 package dbhandlers
 
 import (
-	"database/sql"
 	"errors"
-	"net/http"
 	"time"
 	"virtual_hole_api/internal/database/dbConnect"
 	"virtual_hole_api/internal/models"
-
-	"github.com/gin-gonic/gin"
 )
 
 func SaveUserDB(newUser models.User) error {
@@ -17,7 +13,7 @@ func SaveUserDB(newUser models.User) error {
 		return err
 	}
 	defer db.Close()
-	
+
 	_, err = db.Exec(`INSERT INTO users (fullname, email, password) VALUES ($1,$2,$3)`, newUser.FullName, newUser.Email, newUser.Password)
 	if err != nil {
 		return err
@@ -36,9 +32,6 @@ func CheckUserIfExistsDB(email string) (bool, error) {
 	err = db.QueryRow(`SELECT EXISTS (SELECT 1 FROM users where email = $1)`, email).
 		Scan(&exists)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, err
-		}
 		return false, err
 	}
 	return exists, nil
@@ -58,7 +51,7 @@ func StoreOneTimeCodeDB(user models.User, code string) error {
 	return nil
 }
 
-func OneTimeCodeGetUserDB(ctx *gin.Context, oneTimeCode models.OneTimeCode) (models.OneTimeCode, error) {
+func OneTimeCodeGetUserDB(oneTimeCode models.OneTimeCode) (models.OneTimeCode, error) {
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
 		return models.OneTimeCode{}, err
@@ -68,10 +61,6 @@ func OneTimeCodeGetUserDB(ctx *gin.Context, oneTimeCode models.OneTimeCode) (mod
 	var newCode models.OneTimeCode
 	err = db.QueryRow(`SELECT email, code, last_code_sent_at FROM one_time_code WHERE email = $1`, oneTimeCode.Email).Scan(&newCode.Email, &newCode.Code, &newCode.LastCodeSentAt)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return models.OneTimeCode{}, err
-		}
 		return models.OneTimeCode{}, err
 	}
 	return newCode, nil
@@ -151,9 +140,6 @@ func GetUsernameDB(usernameStruct models.Username) (models.Username, error) {
 		err = db.QueryRow(`SELECT * FROM usernames WHERE email = $1`, usernameStruct.Email).
 			Scan(&exUsernameStruct.ID, &exUsernameStruct.Username, &exUsernameStruct.Email, &exUsernameStruct.UsernameCreatedAt, &exUsernameStruct.UsernameChangedAt)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				return models.Username{}, err
-			}
 			return models.Username{}, err
 		}
 	} else {
@@ -202,9 +188,6 @@ func GetPasswordDB(email string) (models.Password, error) {
 	err = db.QueryRow(`SELECT * FROM passwords email = $1`, email).
 		Scan(&password.ID, &password.Password, &password.Email, &password.PasswordCreatedAt, &password.PasswordChangedAt)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return models.Password{}, err
-		}
 		return models.Password{}, err
 	}
 	return password, nil

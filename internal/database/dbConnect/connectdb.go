@@ -17,7 +17,6 @@ func ConnectDB() (*sql.DB, error) {
 	dbName := os.Getenv("DB_NAME")
 
 	dsn := fmt.Sprintf("postgres://postgres:%v@%v%v/%v", dbPassword, dbUrl, dbPort, dbName)
-	// dsn := fmt.Sprintf("postgres://postgres:dev_diego@localhost:5433/shortstream")
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -29,6 +28,5 @@ func ConnectDB() (*sql.DB, error) {
 		return nil, err
 	}
 
-	fmt.Println("✅ Connected to PostgreSQL successfully!")
 	return db, nil
 }

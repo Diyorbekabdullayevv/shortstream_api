@@ -17,7 +17,7 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-func VerifyUser(ctx *gin.Context, user models.User) (models.User, error) {
+func VerifyUser(user models.User) (models.User, error) {
 
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
@@ -30,7 +30,7 @@ func VerifyUser(ctx *gin.Context, user models.User) (models.User, error) {
 		Scan(&existingUser.Id, &existingUser.Email, &existingUser.Password)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
+			return models.User{}, err
 		}
 		return models.User{}, err
 	}
