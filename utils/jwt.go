@@ -1,66 +1,31 @@
 package utils
 
 import (
-	"database/sql"
-	"errors"
-	"net/http"
+	"os"
 	"time"
-	"virtual_hole_api/internal/database/dbConnect"
-	"virtual_hole_api/internal/models"
 
-	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var accessSecret = []byte("super-secret-access")   // should be in env variable
-var refreshSecret = []byte("super-secret-refresh") // should be in env variable
+var jwtSecretKey = os.Getenv("JWT_SECRET_KEY")
 
 type Claims struct {
 	Email string `json:"email"`
 	jwt.RegisteredClaims
 }
 
-func VerifyUser(ctx *gin.Context, user models.User) (models.User, error) {
-
-	db, err := dbConnect.ConnectDB()
-	if err != nil {
-		return models.User{}, err
-	}
-	defer db.Close()
-
-	var existingUser models.User
-	err = db.QueryRow(`SELECT id, email, password FROM users where email = $1`, user.Email).
-		Scan(&existingUser.Id, &existingUser.Email, &existingUser.Password)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
-		}
-		return models.User{}, err
-	}
-
-	if user.Email != existingUser.Email {
-		return models.User{}, errors.New("invalid email")
-	}
-
-	isValid := CheckHashPassword(user.Password, existingUser.Password)
-	if !isValid {
-		return models.User{}, errors.New("invalid password")
-	}
-
-	return existingUser, nil
-}
-
 func GenerateTokens(email string, expMins time.Duration) (accessToken string, refreshToken string, err error) {
 
+	var jwtSecretKey = os.Getenv("JWT_SECRET_KEY")
 	accessClaims := &Claims{
 		Email: email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expMins)), 
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expMins)),
 		},
 	}
 
 	accessJwt := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessToken, err = accessJwt.SignedString(accessSecret)
+	accessToken, err = accessJwt.SignedString([]byte(jwtSecretKey))
 	if err != nil {
 		return "", "", err
 	}
@@ -68,12 +33,12 @@ func GenerateTokens(email string, expMins time.Duration) (accessToken string, re
 	refreshClaims := &Claims{
 		Email: email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), 
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
 		},
 	}
 
 	refreshJwt := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshToken, err = refreshJwt.SignedString(refreshSecret)
+	refreshToken, err = refreshJwt.SignedString([]byte(jwtSecretKey))
 	if err != nil {
 		return "", "", err
 	}
@@ -82,9 +47,10 @@ func GenerateTokens(email string, expMins time.Duration) (accessToken string, re
 }
 
 func VerifyToken(tokenStr string, isRefresh bool) (*Claims, error) {
-	secret := accessSecret
+	
+	secret := jwtSecretKey
 	if isRefresh {
-		secret = refreshSecret
+		secret = jwtSecretKey
 	}
 
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
@@ -99,12 +65,11 @@ func VerifyToken(tokenStr string, isRefresh bool) (*Claims, error) {
 
 func GenTknForChecking(email, scope string) (string, error) {
 
-	secretKey := "super_secret_key"
-
+	var jwtSecretKey = os.Getenv("JWT_SECRET_KEY")
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"email": email,
 		"scope": scope,
 		"exp":   time.Now().Add(15 * time.Minute).Unix(),
 	})
-	return token.SignedString([]byte(secretKey))
+	return token.SignedString([]byte(jwtSecretKey))
 }
