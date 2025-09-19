@@ -51,3 +51,9 @@ type Password struct {
 	PasswordCreatedAt *time.Time `json:"password_created_at,omitempty"`
 	PasswordChangedAt *time.Time `json:"password_changed_at,omitempty"`
 }
+
+type UserInfo struct {
+	Email    string
+	FullName string
+	UID      string
+}

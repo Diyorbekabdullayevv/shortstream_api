@@ -4,14 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func ConnectDB() (*sql.DB, error) {
 
-	// Adjust user, password, dbname, port
-	dsn := "postgres://postgres:dev_diego@localhost:5433/shortstream"
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbUrl := os.Getenv("DB_URL")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+
+	dsn := fmt.Sprintf("postgres://postgres:%v@%v%v/%v", dbPassword, dbUrl, dbPort, dbName)
+	// dsn := fmt.Sprintf("postgres://postgres:dev_diego@localhost:5433/shortstream")
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {

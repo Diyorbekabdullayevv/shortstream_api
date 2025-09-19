@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"virtual_hole_api/internal/api/routers"
 
 	"github.com/gin-gonic/gin"
@@ -20,5 +21,6 @@ func main() {
 
 	routers.Router(server)
 
-	server.Run(":5000")
+	apiPort := os.Getenv("API_PORT")
+	server.Run(apiPort)
 }

@@ -1,18 +1,51 @@
 package utils
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 	"unicode"
 	"virtual_hole_api/internal/database/dbConnect"
-	"virtual_hole_api/internal/database/dbhandlers"
 	"virtual_hole_api/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/api/idtoken"
 )
+
+func VerifyUser(ctx *gin.Context, user models.User) (models.User, error) {
+
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return models.User{}, err
+	}
+	defer db.Close()
+
+	var existingUser models.User
+	err = db.QueryRow(`SELECT id, email, password FROM users where email = $1`, user.Email).
+		Scan(&existingUser.Id, &existingUser.Email, &existingUser.Password)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
+		}
+		return models.User{}, err
+	}
+
+	if user.Email != existingUser.Email {
+		return models.User{}, errors.New("invalid email")
+	}
+
+	isValid := CheckHashPassword(user.Password, existingUser.Password)
+	if !isValid {
+		return models.User{}, errors.New("invalid password")
+	}
+
+	return existingUser, nil
+}
 
 func SaveUserDetails(ctx *gin.Context, user models.User) (models.Device, error) {
 	var (
@@ -100,6 +133,7 @@ func CheckString(str string) error {
 		symbolLenth []any
 		digitLenth  []any
 	)
+
 	for _, r := range str {
 		switch {
 		case unicode.IsUpper(r):
@@ -120,21 +154,36 @@ func CheckString(str string) error {
 	return nil
 }
 
-func GetUser(ctx *gin.Context) {
-	userId := ctx.Param("id")
+func VerifyGoogleIDToken(idToken string) (models.UserInfo, error) {
 
-	user, err := dbhandlers.GetUserDB(ctx, userId)
+	// Replace with your Google Client ID
+	clientID := os.Getenv("CLIENT_ID")
+
+	payload, err := idtoken.Validate(context.Background(), idToken, clientID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to GET user from database:", err)
-		return
+		return models.UserInfo{}, fmt.Errorf("invalid ID token: %v", err)
 	}
 
-	userMap := map[string]any{
-		"Name:":  user.FullName,
-		"Email:": user.Email,
+	claims := payload.Claims
+
+	// Extract email
+	email, ok := claims["email"].(string)
+	if !ok {
+		return models.UserInfo{}, fmt.Errorf("email not found in token")
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "success"})
-	ctx.JSON(http.StatusFound, gin.H{"User:": userMap})
+	// Extract full name (if available)
+	fullName, _ := claims["name"].(string) // not always present, safe cast
+
+	// Extract Google UID (the 'sub' claim is always present)
+	uid, ok := claims["sub"].(string)
+	if !ok {
+		return models.UserInfo{}, fmt.Errorf("uid not found in token")
+	}
+
+	return models.UserInfo{
+		Email:    email,
+		FullName: fullName,
+		UID:      uid,
+	}, nil
 }

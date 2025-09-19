@@ -15,6 +15,8 @@ import (
 )
 
 func RegisterUser(ctx *gin.Context) {
+
+	//* 1 Get user input
 	var newUser models.User
 	err := ctx.ShouldBindBodyWithJSON(&newUser)
 	if err != nil {
@@ -23,6 +25,7 @@ func RegisterUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 2  Validate user
 	if len(newUser.FullName) < 3 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"message": "invalid request"})
 		fmt.Println("Invalid username!")
@@ -44,16 +47,17 @@ func RegisterUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 3  Hash user password
 	hashedPassword, err := utils.HashPassword(newUser.Password)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
 		fmt.Println("Failed to HASH user password:", err)
 		return
 	}
-
 	newUser.Password = hashedPassword
 
-	err = dbhandlers.RegisterUserDB(newUser)
+	//* 4  Save user data
+	err = dbhandlers.SaveUserDB(newUser)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
 		fmt.Println("Failed to SAVE user in the database:", err)
@@ -67,6 +71,7 @@ func RegisterUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 5  Send and save user one_time_code
 	code, err := utils.GenerateCode()
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
@@ -88,6 +93,7 @@ func RegisterUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 6 Return success response
 	userMap := map[string]any{
 		"Name:":  newUser.FullName,
 		"Email:": newUser.Email,
@@ -99,6 +105,7 @@ func RegisterUser(ctx *gin.Context) {
 
 func LoginUser(ctx *gin.Context) {
 
+	//* 1 Get user input
 	var user models.User
 	err := ctx.ShouldBindBodyWithJSON(&user)
 	if err != nil {
@@ -107,6 +114,7 @@ func LoginUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Verify user
 	userFromDb, err := utils.VerifyUser(ctx, user)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -114,6 +122,7 @@ func LoginUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Generate and manage tokens
 	expMins := 15 * time.Minute
 
 	accessToken, refreshToken, err := utils.GenerateTokens(user.Email, expMins)
@@ -135,6 +144,7 @@ func LoginUser(ctx *gin.Context) {
 		true,
 	)
 
+	//* 4 Save device details
 	device, err := utils.SaveUserDetails(ctx, userFromDb)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "internal server error"})
@@ -142,6 +152,7 @@ func LoginUser(ctx *gin.Context) {
 		return
 	}
 
+	//* 5 Return success response
 	tokenMap := map[string]string{
 		"token":        accessToken,
 		"refreshToken": refreshToken,
@@ -154,6 +165,7 @@ func LoginUser(ctx *gin.Context) {
 
 func ResendCode(ctx *gin.Context) {
 
+	//* 1 Get user input
 	var user models.OneTimeCode
 	err := ctx.ShouldBindBodyWithJSON(&user)
 	if err != nil {
@@ -162,6 +174,7 @@ func ResendCode(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Get one_time_code data from database
 	exUser, err := dbhandlers.OneTimeCodeGetUserDB(ctx, user)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -169,6 +182,7 @@ func ResendCode(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Send and save user one_time_code
 	allowed, remaining := utils.CanSendCode(exUser.LastCodeSentAt)
 	if allowed {
 		code, err := utils.GenerateCode()
@@ -198,11 +212,14 @@ func ResendCode(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"message": seconds})
 		return
 	}
+
+	//* 4 Return success response
 	ctx.JSON(http.StatusOK, gin.H{"success": "code sent to your email"})
 }
 
 func ConfirmCode(ctx *gin.Context) {
 
+	//* 1 Get user input
 	var user models.OneTimeCode
 	err := ctx.ShouldBindBodyWithJSON(&user)
 	if err != nil {
@@ -211,6 +228,7 @@ func ConfirmCode(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Get one_time_code data from database
 	exUser, err := dbhandlers.OneTimeCodeGetUserDB(ctx, user)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -218,24 +236,28 @@ func ConfirmCode(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Validate one_time_code
 	if user.Code != exUser.Code {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "invalid code"})
 		return
 	}
 
+	//* 4 Generate token and set as a header
 	tokenString, err := utils.GenTknForChecking(user.Email, "username_only")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to GEERATE token:", err)
 		return
 	}
-
 	ctx.Header("Authorization", "Bearer "+tokenString)
+
+	//* 5 Return success response
 	ctx.JSON(http.StatusOK, gin.H{"message": "code successfuly confirmed"})
 }
 
 func CreateUsername(ctx *gin.Context) {
 
+	//* 1 Get user input
 	var usernameStruct models.Username
 	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
 	if err != nil {
@@ -244,6 +266,7 @@ func CreateUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Authenticate user token
 	authHeader := ctx.GetHeader("Authorization")
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
@@ -263,6 +286,7 @@ func CreateUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Validate username
 	if len(usernameStruct.Username) < 3 || len(usernameStruct.Username) > 56 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain at least 3 to 56 characters!"})
 		return
@@ -273,8 +297,13 @@ func CreateUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 4 Check if user exists
 	exists, err := dbhandlers.CheckUsernameIfExistsDB(usernameStruct.Username)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to CHECK if username exists:", err)
 		return
@@ -285,6 +314,7 @@ func CreateUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 5 Save username to database
 	email := claims["email"]
 	err = dbhandlers.SaveUsernameDB(usernameStruct.Username, email.(string))
 	if err != nil {
@@ -293,10 +323,13 @@ func CreateUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 6 Return success response
 	ctx.JSON(http.StatusCreated, gin.H{"message": "username successfully saved"})
 }
 
 func ChangeUsername(ctx *gin.Context) {
+
+	//* 1 Get user input
 	var usernameStruct models.Username
 	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
 	if err != nil {
@@ -305,6 +338,7 @@ func ChangeUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Authenticate user token
 	authHeader := ctx.GetHeader("Authorization")
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
@@ -314,6 +348,7 @@ func ChangeUsername(ctx *gin.Context) {
 
 	if err != nil || !token.Valid {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+		fmt.Println(err)
 		fmt.Println("token:", token)
 		return
 	}
@@ -324,6 +359,7 @@ func ChangeUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Validate username
 	if len(usernameStruct.Username) < 3 || len(usernameStruct.Username) > 56 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain at least 3 to 56 characters!"})
 		return
@@ -334,6 +370,7 @@ func ChangeUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 4 Check if user exists
 	exists, err := dbhandlers.CheckUsernameIfExistsDB(usernameStruct.Username)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -346,6 +383,7 @@ func ChangeUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 5 Update username in the database
 	email := claims["email"]
 	err = dbhandlers.UpdateUsernameDB(usernameStruct.Username, email.(string))
 	if err != nil {
@@ -354,8 +392,8 @@ func ChangeUsername(ctx *gin.Context) {
 		return
 	}
 
+	//* 6 Generate and manage tokens
 	expMins := 24 * time.Hour
-
 	accessToken, refreshToken, err := utils.GenerateTokens(usernameStruct.Email, expMins)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -380,11 +418,16 @@ func ChangeUsername(ctx *gin.Context) {
 		"refreshToken": refreshToken,
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{"message": "username successfully changed"})
-	ctx.JSON(http.StatusCreated, gin.H{"data": tokenMap})
+	//* 7 Return success response
+	ctx.JSON(http.StatusCreated, gin.H{
+		"message": "username successfully changed",
+		"data":    tokenMap,
+	})
 }
 
 func ForgotPassword(ctx *gin.Context) {
+
+	//* 1 Get user input
 	var usernameStruct models.Username
 	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
 	if err != nil {
@@ -393,6 +436,7 @@ func ForgotPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Get username from database
 	exUsernameStruct, err := dbhandlers.GetUsernameDB(usernameStruct)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -404,6 +448,7 @@ func ForgotPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Send and save user one_time_code
 	code, err := utils.GenerateCode()
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -429,11 +474,13 @@ func ForgotPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 4 Return success response
 	ctx.JSON(http.StatusOK, gin.H{"message": "code sent to your email"})
 }
 
 func ConfirmCodeResetPassword(ctx *gin.Context) {
 
+	//* 1 Get user input
 	var user models.OneTimeCode
 	err := ctx.ShouldBindBodyWithJSON(&user)
 	if err != nil {
@@ -442,6 +489,7 @@ func ConfirmCodeResetPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 2 Get one_time_code data from database
 	exUser, err := dbhandlers.OneTimeCodeGetUserDB(ctx, user)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -449,23 +497,28 @@ func ConfirmCodeResetPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 3 Validate one_time_code
 	if user.Code != exUser.Code {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "invalid code"})
 		return
 	}
 
+	//* 4 Generate token and set as a header
 	tokenString, err := utils.GenTknForChecking(user.Email, "password_only")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to GEERATE token:", err)
 		return
 	}
-
 	ctx.Header("Authorization", "Bearer "+tokenString)
+
+	//* 5 Return success response
 	ctx.JSON(http.StatusOK, gin.H{"message": "code successfuly confirmed"})
 }
 
 func ResetPassword(ctx *gin.Context) {
+
+	//* 1 Get user input
 	var password models.Password
 	err := ctx.ShouldBindBodyWithJSON(&password)
 	if err != nil {
@@ -474,7 +527,7 @@ func ResetPassword(ctx *gin.Context) {
 		return
 	}
 
-	// Verify token
+	//* 2 Authenticate user token
 	authHeader := ctx.GetHeader("Authorization")
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
@@ -495,7 +548,7 @@ func ResetPassword(ctx *gin.Context) {
 	}
 	email := claims["email"]
 
-	// Verify password
+	//* 3 Validate passwords
 	if password.Password != password.RepeatPassword {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "both passwords must be the same"})
 		return
@@ -514,6 +567,7 @@ func ResetPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 4 Hash and save updated password
 	hashedPassword, err := utils.HashPassword(password.Password)
 	password.Password = hashedPassword
 	if err != nil {
@@ -522,7 +576,6 @@ func ResetPassword(ctx *gin.Context) {
 		return
 	}
 
-	// Save updated password data
 	err = dbhandlers.UpdatePasswordDB(password.Password, email.(string))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -530,13 +583,152 @@ func ResetPassword(ctx *gin.Context) {
 		return
 	}
 
+	//* 5 Return success response
 	ctx.JSON(http.StatusCreated, gin.H{"message": "password successfully reset"})
 }
 
 func LoginWithGoogle(ctx *gin.Context) {
 
+	//* 1 Get user input
+	var body struct {
+		IDToken string `json:"idToken"`
+	}
+
+	if err := ctx.ShouldBindBodyWithJSON(&body); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		fmt.Println("Bad request:", err)
+		return
+	}
+
+	//* 2 Verify idToken from google
+	userInfo, err := utils.VerifyGoogleIDToken(body.IDToken)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid Google token"})
+		return
+	}
+
+	//* 3 Check if user exists in the database
+	exists, err := dbhandlers.CheckUserIfExistsDB(userInfo.Email)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to CHECK if user exists in the database:", err)
+		return
+	}
+
+	if !exists {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "user with this email doesn`t exists"})
+		return
+	}
+
+	//* 4 Generate and manage tokens
+	expMins := 15 * time.Minute
+	accessToken, refreshToken, err := utils.GenerateTokens(userInfo.Email, expMins)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		fmt.Println("Failed to GENERATE token:", err)
+		return
+	}
+
+	ctx.Header("Authorization", "Bearer "+accessToken)
+
+	ctx.SetCookie(
+		"refresh_token",
+		refreshToken,
+		7*24*60*60,
+		"/",
+		"localhost",
+		true,
+		true,
+	)
+
+	tokenMap := map[string]string{
+		"token":        accessToken,
+		"refreshToken": refreshToken,
+	}
+
+	//* 5 Return success response
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "user successfully login. Woo hoo!",
+		"data":    tokenMap,
+	})
 }
 
 func RegisterWithGoogle(ctx *gin.Context) {
 
+	//* 1 Get user input
+	var body struct {
+		IDToken string `json:"idToken"`
+	}
+
+	if err := ctx.ShouldBindBodyWithJSON(&body); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		fmt.Println("Bad request:", err)
+		return
+	}
+
+	//* 2 Verify idToken from google
+	userInfo, err := utils.VerifyGoogleIDToken(body.IDToken)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "invalid Google token"})
+		return
+	}
+
+	//* 3 Check if user exists in the database
+	exists, err := dbhandlers.CheckUserIfExistsDB(userInfo.Email)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to CHECK if user exists in the database:", err)
+		return
+	}
+
+	if exists {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "user with this email already exists"})
+		return
+	}
+
+	//* 4 Generate and manage token
+	tokenString, err := utils.GenTknForChecking(userInfo.Email, "username_only")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to GEERATE token:", err)
+		return
+	}
+
+	ctx.Header("Authorization", "Bearer "+tokenString)
+
+	//* 5 Hash user password
+	hashedPassword, err := utils.HashPassword(userInfo.UID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to HASH password:", err)
+		return
+	}
+
+	//* 6 Save new user to database
+	newUser := models.User{
+		FullName: userInfo.FullName,
+		Email:    userInfo.Email,
+		Password: hashedPassword,
+	}
+
+	err = dbhandlers.SaveUserDB(newUser)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to SAVE user to database:", err)
+		return
+	}
+
+	//* 7 Return success response
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "user successfully login. Woo hoo!",
+		"token":   tokenString,
+	})
 }

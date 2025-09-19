@@ -11,18 +11,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterUserDB(newUser models.User) error {
+func SaveUserDB(newUser models.User) error {
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-
+	
 	_, err = db.Exec(`INSERT INTO users (fullname, email, password) VALUES ($1,$2,$3)`, newUser.FullName, newUser.Email, newUser.Password)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+func CheckUserIfExistsDB(email string) (bool, error) {
+	db, err := dbConnect.ConnectDB()
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+
+	var exists bool
+	err = db.QueryRow(`SELECT EXISTS (SELECT 1 FROM users where email = $1)`, email).
+		Scan(&exists)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, err
+		}
+		return false, err
+	}
+	return exists, nil
 }
 
 func StoreOneTimeCodeDB(user models.User, code string) error {
@@ -70,25 +89,6 @@ func UpdateOneTimeCodeDB(user models.OneTimeCode) error {
 		return err
 	}
 	return nil
-}
-
-func GetUserDB(ctx *gin.Context, userId string) (models.User, error) {
-	db, err := dbConnect.ConnectDB()
-	if err != nil {
-		return models.User{}, err
-	}
-	defer db.Close()
-
-	var user models.User
-	err = db.QueryRow(`SELECT fullname, email, password FROM users where id = $1`, userId).
-		Scan(&user.FullName, &user.Email, &user.Password)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, gin.H{"message": "user not found"})
-		}
-		return models.User{}, err
-	}
-	return user, nil
 }
 
 func CheckUsernameIfExistsDB(username string) (bool, error) {
