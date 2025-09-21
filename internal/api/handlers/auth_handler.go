@@ -13,6 +13,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// RegisterUser godoc
+// @Summary Register a new user
+// @Description Create a new user account with email, password, etc.
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.RegisterRequest true "User registration request"
+// @Success 201 {object} models.RegisterResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/registration [post]
 func RegisterUser(ctx *gin.Context) {
 
 	//* 1 Get user input
@@ -39,7 +50,7 @@ func RegisterUser(ctx *gin.Context) {
 		return
 	}
 
-	err = utils.CheckString(newUser.Password)
+	err = utils.CheckPassword(newUser.Password)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid password"})
 		fmt.Println(err)
@@ -99,9 +110,20 @@ func RegisterUser(ctx *gin.Context) {
 	// }
 
 	// ctx.JSON(http.StatusCreated, gin.H{"User:": userMap})
-	ctx.JSON(http.StatusOK, gin.H{"message": "user successfully registered"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "Code sent to your email address!"})
 }
 
+// LoginUser godoc
+// @Summary Login user
+// @Description Authenticate user with email and password
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.LoginRequest true "Login request"
+// @Success 200 {object} models.LoginResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 401 {object} models.MessageResponse
+// @Router /authentication/login [post]
 func LoginUser(ctx *gin.Context) {
 
 	//* 1 Get user input
@@ -120,7 +142,7 @@ func LoginUser(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		fmt.Println("Failed to VERIFY user:", err)
 		return
 	}
@@ -156,20 +178,29 @@ func LoginUser(ctx *gin.Context) {
 	}
 
 	//* 5 Return success response
-	// tokenMap := map[string]string{
-	// 	"token":        accessToken,
-	// 	"refreshToken": refreshToken,
-	// }
+	tokenMap := map[string]string{
+		"token":        accessToken,
+		"refreshToken": refreshToken,
+	}
 	// ctx.JSON(http.StatusOK, gin.H{"data": tokenMap})
 	// ctx.JSON(http.StatusOK, gin.H{"device": device})
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message": "user successfully login",
-		// "data":    tokenMap,
-		// "device":  device,
+		"data": tokenMap,
 	})
 }
 
+// ResendCode godoc
+// @Summary Resend verification code
+// @Description Resend a one-time verification code to the user's email
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.ForgotPasswordRequest true "Resend code request"
+// @Success 200 {object} models.MessageResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/resend_code [put]
 func ResendCode(ctx *gin.Context) {
 
 	//* 1 Get user input
@@ -178,6 +209,11 @@ func ResendCode(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
 		fmt.Println("Failed to BIND body with json:", err)
+		return
+	}
+
+	if !strings.Contains(user.Email, "@") {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid email"})
 		return
 	}
 
@@ -225,9 +261,20 @@ func ResendCode(ctx *gin.Context) {
 	}
 
 	//* 4 Return success response
-	ctx.JSON(http.StatusOK, gin.H{"message": "code sent to your email"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "Code send to your email address!"})
 }
 
+// ConfirmCode godoc
+// @Summary Confirm verification code
+// @Description Confirm the one-time code sent to the user's email
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.CodeConfirmationRequest true "Code confirmation request"
+// @Success 200 {object} models.MessageResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/code_confirmation [post]
 func ConfirmCode(ctx *gin.Context) {
 
 	//* 1 Get user input
@@ -266,14 +313,37 @@ func ConfirmCode(ctx *gin.Context) {
 	}
 	ctx.Header("Authorization", "Bearer "+tokenString)
 
+	tokenMap := map[string]any{
+		"token": tokenString,
+	}
 	//* 5 Return success response
-	ctx.JSON(http.StatusOK, gin.H{"message": "code successfuly confirmed"})
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Code confirmed successfully!",
+		"data":    tokenMap,
+	})
 }
 
-func CreateUsername(ctx *gin.Context) {
+// CheckUsername godoc
+// @Summary Check username availability
+// @Description Check if a username is available
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.UsernameRequest true "Username"
+// @Success 200 {object} models.UsernameResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 401 {object} models.MessageResponse
+// @Router /authentication/check_username [post]
+// @Security BearerAuth
+func CheckUsername(ctx *gin.Context) {
+
+	var (
+		isAvailable        bool
+		availableUsernames []string
+	)
 
 	//* 1 Get user input
-	var usernameStruct models.Username
+	var usernameStruct models.UsernameRequest
 	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
@@ -282,50 +352,54 @@ func CreateUsername(ctx *gin.Context) {
 	}
 
 	//* 2 Validate username
-	if len(usernameStruct.Username) < 3 || len(usernameStruct.Username) > 56 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain at least 3 to 56 characters!"})
-		return
-	}
-
-	if !strings.Contains(usernameStruct.Username, ".") || !strings.Contains(usernameStruct.Username, "_") {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain both '.' and '_' signs!"})
-		return
-	}
-
-	//* 3 Check if user exists
-	exists, err := dbhandlers.CheckUsernameIfExistsDB(usernameStruct.Username)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to CHECK if username exists:", err)
-		return
-	}
-
-	if exists {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "username already choosen by users"})
-		return
-	}
-
-	//* 4 Save username to database
-	email := ctx.GetString("email_username")
-	err = dbhandlers.SaveUsernameDB(usernameStruct.Username, email)
+	isValid, err := utils.CheckUsername(usernameStruct.Username)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to SAVE username to database:", err)
+		fmt.Println("Invalid username:", err)
 		return
+	}
+
+	if !isValid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid username"})
+		return
+	}
+
+	availableUsernames, err = utils.GenerateUsernames(usernameStruct.Username)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Failed to GENERATE usernames:", err)
+		return
+	}
+
+	if len(availableUsernames) > 0 {
+		isAvailable = false
 	}
 
 	//* 5 Return success response
-	ctx.JSON(http.StatusCreated, gin.H{"message": "username successfully saved"})
+	ctx.JSON(http.StatusCreated, gin.H{
+		"available":           isAvailable,
+		"available_usernames": availableUsernames,
+	})
+
 }
 
+// ChangeUsername godoc
+// @Summary Change username
+// @Description Update the user's username
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.UsernameRequest true "Change username request"
+// @Success 200 {object} models.UsernameResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 401 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/change_username [post]
+// @Security BearerAuth
 func ChangeUsername(ctx *gin.Context) {
 
 	//* 1 Get user input
-	var usernameStruct models.Username
+	var usernameStruct models.UsernameRequest
 	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
@@ -334,13 +408,15 @@ func ChangeUsername(ctx *gin.Context) {
 	}
 
 	//* 2 Validate username
-	if len(usernameStruct.Username) < 3 || len(usernameStruct.Username) > 56 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain at least 3 to 56 characters!"})
+	isValid, err := utils.CheckUsername(usernameStruct.Username)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		fmt.Println("Invalid username:", err)
 		return
 	}
 
-	if !strings.Contains(usernameStruct.Username, ".") || !strings.Contains(usernameStruct.Username, "_") {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "username must contain both '.' and '_' signs!"})
+	if !isValid {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid username"})
 		return
 	}
 
@@ -363,16 +439,23 @@ func ChangeUsername(ctx *gin.Context) {
 
 	//* 4 Update username in the database
 	email := ctx.GetString("email_username")
-	err = dbhandlers.UpdateUsernameDB(usernameStruct.Username, email)
+	// err = dbhandlers.UpdateUsernameDB(usernameStruct.Username, email)
+	// if err != nil {
+	// 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	// 	fmt.Println("Failed to UPDATE username to database:", err)
+	// 	return
+	// }
+
+	err = dbhandlers.SaveUsernameDB(usernameStruct.Username, email)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		fmt.Println("Failed to UPDATE username to database:", err)
+		fmt.Println("Failed to SAVE username to database:", err)
 		return
 	}
 
 	//* 5 Generate and manage tokens
 	expMins := 24 * time.Hour
-	accessToken, refreshToken, err := utils.GenerateTokens(usernameStruct.Email, expMins)
+	accessToken, refreshToken, err := utils.GenerateTokens(email, expMins)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to GENERATE tokens:", err)
@@ -381,33 +464,34 @@ func ChangeUsername(ctx *gin.Context) {
 
 	ctx.Header("Authorization", "Bearer "+accessToken)
 
-	ctx.SetCookie(
-		"refresh_token",
-		refreshToken,
-		7*24*60*60,
-		"/",
-		"localhost",
-		true,
-		true,
-	)
-
-	// tokenMap := map[string]string{
-	// 	"token":        accessToken,
-	// 	"refreshToken": refreshToken,
-	// }
+	tokenMap := map[string]string{
+		"token":        accessToken,
+		"refreshToken": refreshToken,
+	}
 
 	//* 6 Return success response
 	ctx.JSON(http.StatusCreated, gin.H{
-		"message": "username successfully changed",
-		// "data":    tokenMap,
+		"message": "Username successfully changed!",
+		"data":    tokenMap,
 	})
 }
 
+// ForgotPassword godoc
+// @Summary Forgot password
+// @Description Send a reset code to user's email to reset password
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.ForgotPasswordRequest true "Forgot password request"
+// @Success 200 {object} models.MessageResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/forgot_password [put]
 func ForgotPassword(ctx *gin.Context) {
 
 	//* 1 Get user input
-	var usernameStruct models.Username
-	err := ctx.ShouldBindBodyWithJSON(&usernameStruct)
+	var userCred models.ForgotPasswordRequest
+	err := ctx.ShouldBindBodyWithJSON(&userCred)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
 		fmt.Println("Failed to BIND body with json:", err)
@@ -415,7 +499,7 @@ func ForgotPassword(ctx *gin.Context) {
 	}
 
 	//* 2 Get username from database
-	exUsernameStruct, err := dbhandlers.GetUsernameDB(usernameStruct)
+	exUsernameStruct, err := dbhandlers.GetUsernameDB(userCred.Email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
@@ -453,9 +537,20 @@ func ForgotPassword(ctx *gin.Context) {
 	}
 
 	//* 4 Return success response
-	ctx.JSON(http.StatusOK, gin.H{"message": "code sent to your email"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "Code send to your email address!"})
 }
 
+// ConfirmCodeResetPassword godoc
+// @Summary Confirm reset code
+// @Description Confirm the code sent to reset the user's password
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.CodeConfirmationRequest true "Confirm reset code request"
+// @Success 200 {object} models.MessageResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/confirm_code_password [post]
 func ConfirmCodeResetPassword(ctx *gin.Context) {
 
 	//* 1 Get user input
@@ -494,14 +589,33 @@ func ConfirmCodeResetPassword(ctx *gin.Context) {
 	}
 	ctx.Header("Authorization", "Bearer "+tokenString)
 
+	tokenMap := map[string]any{
+		"token": tokenString,
+	}
 	//* 5 Return success response
-	ctx.JSON(http.StatusOK, gin.H{"message": "code successfuly confirmed"})
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Code confirmed successfully!",
+		"data":    tokenMap,
+	})
 }
 
+// ResetPassword godoc
+// @Summary Reset user password
+// @Description Reset password with email and new password
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.ResetPasswordRequest true "Reset password request"
+// @Success 200 {object} models.MessageResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 401 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/reset_password [put]
+// @Security BearerAuth
 func ResetPassword(ctx *gin.Context) {
 
 	//* 1 Get user input
-	var password models.Password
+	var password models.ResetPasswordRequest
 	err := ctx.ShouldBindBodyWithJSON(&password)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
@@ -510,18 +624,18 @@ func ResetPassword(ctx *gin.Context) {
 	}
 
 	//* 2 Validate passwords
-	if password.Password != password.RepeatPassword {
+	if password.NewPassword != password.RepeatPassword {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "repeat password must be identical"})
 		return
 	}
 
-	if len(password.Password) < 6 || len(password.Password) > 320 {
+	if len(password.NewPassword) < 6 || len(password.NewPassword) > 320 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid password"})
 		fmt.Println("Invalid password!")
 		return
 	}
 
-	err = utils.CheckString(password.Password)
+	err = utils.CheckPassword(password.NewPassword)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid password"})
 		fmt.Println(err)
@@ -529,8 +643,8 @@ func ResetPassword(ctx *gin.Context) {
 	}
 
 	//* 3 Hash and save updated password
-	hashedPassword, err := utils.HashPassword(password.Password)
-	password.Password = hashedPassword
+	hashedPassword, err := utils.HashPassword(password.NewPassword)
+	password.NewPassword = hashedPassword
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to HASH user password:", err)
@@ -538,7 +652,7 @@ func ResetPassword(ctx *gin.Context) {
 	}
 
 	email := ctx.GetString("email_password")
-	err = dbhandlers.UpdatePasswordDB(password.Password, email)
+	err = dbhandlers.UpdatePasswordDB(password.NewPassword, email)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		fmt.Println("Failed to UPDATE password in database:", err)
@@ -546,9 +660,20 @@ func ResetPassword(ctx *gin.Context) {
 	}
 
 	//* 4 Return success response
-	ctx.JSON(http.StatusCreated, gin.H{"message": "password successfully reset"})
+	ctx.JSON(http.StatusCreated, gin.H{"message": "Password changed successfully!"})
 }
 
+// LoginWithGoogle godoc
+// @Summary Login with Google
+// @Description Authenticate user using Google account
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.UserInfo true "Google login request"
+// @Success 200 {object} models.LoginResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/login_with_google [post]
 func LoginWithGoogle(ctx *gin.Context) {
 
 	//* 1 Get user input
@@ -619,6 +744,17 @@ func LoginWithGoogle(ctx *gin.Context) {
 	})
 }
 
+// RegisterWithGoogle godoc
+// @Summary Register with Google
+// @Description Create a new account using Google account information
+// @Tags authentication
+// @Accept  json
+// @Produce  json
+// @Param request body models.UserInfo true "Google registration request"
+// @Success 201 {object} models.RegisterResponse
+// @Failure 400 {object} models.MessageResponse
+// @Failure 500 {object} models.MessageResponse
+// @Router /authentication/register_with_google [post]
 func RegisterWithGoogle(ctx *gin.Context) {
 
 	//* 1 Get user input

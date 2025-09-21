@@ -2,6 +2,7 @@ package dbhandlers
 
 import (
 	"errors"
+	"strings"
 	"time"
 	"virtual_hole_api/internal/database/dbConnect"
 	"virtual_hole_api/internal/models"
@@ -122,7 +123,8 @@ func UpdateUsernameDB(username, email string) error {
 	return nil
 }
 
-func GetUsernameDB(usernameStruct models.Username) (models.Username, error) {
+func GetUsernameDB(userCred string) (models.Username, error) {
+
 	db, err := dbConnect.ConnectDB()
 	if err != nil {
 		return models.Username{}, err
@@ -130,14 +132,14 @@ func GetUsernameDB(usernameStruct models.Username) (models.Username, error) {
 	defer db.Close()
 
 	var exUsernameStruct models.Username
-	if usernameStruct.Username != "" {
-		err = db.QueryRow(`SELECT * FROM usernames WHERE username = $1`, usernameStruct.Username).
+	if !strings.Contains(userCred, "@") {
+		err = db.QueryRow(`SELECT * FROM usernames WHERE username = $1`, userCred).
 			Scan(&exUsernameStruct.ID, &exUsernameStruct.Username, &exUsernameStruct.Email, &exUsernameStruct.UsernameCreatedAt, &exUsernameStruct.UsernameChangedAt)
 		if err != nil {
 			return models.Username{}, err
 		}
-	} else if usernameStruct.Email != "" {
-		err = db.QueryRow(`SELECT * FROM usernames WHERE email = $1`, usernameStruct.Email).
+	} else if strings.Contains(userCred, "@") {
+		err = db.QueryRow(`SELECT * FROM usernames WHERE email = $1`, userCred).
 			Scan(&exUsernameStruct.ID, &exUsernameStruct.Username, &exUsernameStruct.Email, &exUsernameStruct.UsernameCreatedAt, &exUsernameStruct.UsernameChangedAt)
 		if err != nil {
 			return models.Username{}, err

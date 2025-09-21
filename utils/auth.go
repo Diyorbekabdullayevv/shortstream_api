@@ -6,16 +6,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 	"unicode"
 	"virtual_hole_api/internal/database/dbConnect"
+	"virtual_hole_api/internal/database/dbhandlers"
 	"virtual_hole_api/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/idtoken"
 )
+
+const charset = "abcdefghijklmnopqrstuvwxyz0123456789._"
 
 func VerifyUser(user models.User) (models.User, error) {
 
@@ -125,7 +130,7 @@ func CanSendCode(lastSent time.Time) (bool, int) {
 	return false, remaining
 }
 
-func CheckString(str string) error {
+func CheckPassword(str string) error {
 
 	var (
 		upperLenth  []any
@@ -186,4 +191,59 @@ func VerifyGoogleIDToken(idToken string) (models.UserInfo, error) {
 		FullName: fullName,
 		UID:      uid,
 	}, nil
+}
+
+func CheckUsername(s string) (bool, error) {
+	match, err := regexp.MatchString(`^[a-z0-9._]{3,56}$`, s)
+	if err != nil {
+		return false, err
+	}
+	return match, nil
+}
+
+func randomUsername(base string, totalLen int) string {
+	rand.Seed(time.Now().UnixNano())
+
+	if len(base) > totalLen {
+		totalLen = len(base) + 5
+	}
+
+	randomPart := make([]byte, totalLen-len(base))
+	for i := range randomPart {
+		randomPart[i] = charset[rand.Intn(len(charset))]
+	}
+
+	pos := rand.Intn(totalLen - len(base) + 1)
+	return string(randomPart[:pos]) + base + string(randomPart[pos:])
+}
+
+func GenerateUsernames(username string) ([]string, error) {
+
+	_, err := dbhandlers.GetUsernameDB(username)
+	if err == nil {
+		// username already exists, so we need to suggest new ones
+	} else {
+		// not found → return empty (means it's available)
+		return nil, nil
+	}
+
+	var suggestions []string
+	tries := 0
+
+	for len(suggestions) < 5 && tries < 100 {
+		tries++
+		candidate := randomUsername(username, rand.Intn(12-5+1)+5) // length 5–12
+
+		// check if candidate exists in DB
+		_, err := dbhandlers.GetUsernameDB(candidate)
+		if err != nil { // not found → available
+			suggestions = append(suggestions, candidate)
+		}
+	}
+
+	if len(suggestions) == 0 {
+		return nil, fmt.Errorf("could not generate available usernames")
+	}
+
+	return suggestions, nil
 }

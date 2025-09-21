@@ -1,0 +1,449 @@
+basePath: /
+definitions:
+  models.CodeConfirmationRequest:
+    properties:
+      code:
+        example: "123456"
+        type: string
+      email:
+        example: john@example.com
+        type: string
+    type: object
+  models.ForgotPasswordRequest:
+    properties:
+      email:
+        example: john@example.com
+        type: string
+    type: object
+  models.LoginRequest:
+    properties:
+      email:
+        example: john@example.com
+        type: string
+      password:
+        example: Secret123!
+        type: string
+    type: object
+  models.LoginResponse:
+    properties:
+      expires_in:
+        example: 3600
+        type: integer
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
+  models.MessageResponse:
+    properties:
+      message:
+        example: Operation successful
+        type: string
+    type: object
+  models.RegisterRequest:
+    properties:
+      email:
+        example: john@example.com
+        type: string
+      fullname:
+        example: John Doe
+        type: string
+      password:
+        example: Secret123!
+        type: string
+    type: object
+  models.RegisterResponse:
+    properties:
+      message:
+        example: Code sent to your email address!
+        type: string
+    type: object
+  models.ResetPasswordRequest:
+    properties:
+      new_password:
+        example: NewSecret123!
+        type: string
+      repeat_password:
+        example: NewSecret123!
+        type: string
+    type: object
+  models.UserInfo:
+    properties:
+      email:
+        type: string
+      fullName:
+        type: string
+      uid:
+        type: string
+    type: object
+  models.UsernameRequest:
+    properties:
+      username:
+        example: johndoe
+        type: string
+    type: object
+  models.UsernameResponse:
+    properties:
+      status:
+        example: available
+        type: string
+      username:
+        example: johndoe
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API for ShortStream project
+  title: Authentication API
+  version: "1.0"
+paths:
+  /authentication/change_username:
+    post:
+      consumes:
+      - application/json
+      description: Update the user's username
+      parameters:
+      - description: Change username request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UsernameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.UsernameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Change username
+      tags:
+      - authentication
+  /authentication/check_username:
+    post:
+      consumes:
+      - application/json
+      description: Check if a username is available
+      parameters:
+      - description: Username
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UsernameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.UsernameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Check username availability
+      tags:
+      - authentication
+  /authentication/code_confirmation:
+    post:
+      consumes:
+      - application/json
+      description: Confirm the one-time code sent to the user's email
+      parameters:
+      - description: Code confirmation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CodeConfirmationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Confirm verification code
+      tags:
+      - authentication
+  /authentication/confirm_code_password:
+    post:
+      consumes:
+      - application/json
+      description: Confirm the code sent to reset the user's password
+      parameters:
+      - description: Confirm reset code request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CodeConfirmationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Confirm reset code
+      tags:
+      - authentication
+  /authentication/forgot_password:
+    put:
+      consumes:
+      - application/json
+      description: Send a reset code to user's email to reset password
+      parameters:
+      - description: Forgot password request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Forgot password
+      tags:
+      - authentication
+  /authentication/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with email and password
+      parameters:
+      - description: Login request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Login user
+      tags:
+      - authentication
+  /authentication/login_with_google:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user using Google account
+      parameters:
+      - description: Google login request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserInfo'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Login with Google
+      tags:
+      - authentication
+  /authentication/register_with_google:
+    post:
+      consumes:
+      - application/json
+      description: Create a new account using Google account information
+      parameters:
+      - description: Google registration request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserInfo'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.RegisterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Register with Google
+      tags:
+      - authentication
+  /authentication/registration:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with email, password, etc.
+      parameters:
+      - description: User registration request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.RegisterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Register a new user
+      tags:
+      - authentication
+  /authentication/resend_code:
+    put:
+      consumes:
+      - application/json
+      description: Resend a one-time verification code to the user's email
+      parameters:
+      - description: Resend code request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      summary: Resend verification code
+      tags:
+      - authentication
+  /authentication/reset_password:
+    put:
+      consumes:
+      - application/json
+      description: Reset password with email and new password
+      parameters:
+      - description: Reset password request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Reset user password
+      tags:
+      - authentication
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

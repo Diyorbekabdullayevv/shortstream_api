@@ -1,12 +1,24 @@
+// @title Authentication API
+// @version 1.0
+// @description API for ShortStream project
+// @host localhost:8080
+// @BasePath /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 package main
 
 import (
 	"fmt"
 	"os"
+	docs "virtual_hole_api/docs" // replace with actual module name
 	"virtual_hole_api/internal/api/routers"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -18,6 +30,9 @@ func main() {
 	}
 
 	server := gin.Default()
+
+	docs.SwaggerInfo.BasePath = "/"
+	server.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	routers.Router(server)
 
